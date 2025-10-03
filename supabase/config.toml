@@ -1,1 +1,4 @@
 project_id = "kmggnqyehfjihrsbitvm"
+
+[functions.analyze-screenshot]
+verify_jwt = true
