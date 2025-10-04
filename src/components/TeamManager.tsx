@@ -1,79 +1,212 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, X, Users } from "lucide-react";
-import { Team } from "@/types/tournament";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
+import { Copy, Plus, Trash2 } from "lucide-react";
 
-interface TeamManagerProps {
-  teams: Team[];
-  onAddTeam: (teamName: string) => void;
-  onRemoveTeam: (teamId: string) => void;
+interface Team {
+  id: string;
+  name: string;
+  access_code?: string;
 }
 
-const TeamManager = ({ teams, onAddTeam, onRemoveTeam }: TeamManagerProps) => {
+export default function TeamManager() {
+  const [teams, setTeams] = useState<Team[]>([]);
   const [newTeamName, setNewTeamName] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleAddTeam = () => {
+  useEffect(() => {
+    fetchTeams();
+  }, []);
+
+  const fetchTeams = async () => {
+    const { data: teamsData, error: teamsError } = await supabase
+      .from("teams")
+      .select("id, name");
+
+    if (teamsError) {
+      console.error("Error fetching teams:", teamsError);
+      return;
+    }
+
+    // Fetch access codes for each team
+    const { data: codesData } = await supabase
+      .from("access_codes")
+      .select("team_id, code")
+      .eq("role", "player");
+
+    const teamsWithCodes = teamsData.map((team) => ({
+      ...team,
+      access_code: codesData?.find((code) => code.team_id === team.id)?.code,
+    }));
+
+    setTeams(teamsWithCodes);
+  };
+
+  const generateAccessCode = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
+    for (let i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  };
+
+  const handleAddTeam = async (e: React.FormEvent) => {
+    e.preventDefault();
+
     if (!newTeamName.trim()) {
       toast.error("Please enter a team name");
       return;
     }
-    if (teams.some((team) => team.name.toLowerCase() === newTeamName.toLowerCase())) {
-      toast.error("Team name already exists");
+
+    setLoading(true);
+
+    try {
+      // Create team
+      const { data: teamData, error: teamError } = await supabase
+        .from("teams")
+        .insert({ name: newTeamName.trim() })
+        .select()
+        .single();
+
+      if (teamError) {
+        toast.error("Failed to create team");
+        return;
+      }
+
+      // Generate access code for the team
+      const accessCode = generateAccessCode();
+      const { error: codeError } = await supabase
+        .from("access_codes")
+        .insert({
+          code: accessCode,
+          role: "player",
+          team_id: teamData.id,
+        });
+
+      if (codeError) {
+        toast.error("Team created but failed to generate access code");
+        return;
+      }
+
+      toast.success(`Team created! Access code: ${accessCode}`);
+      setNewTeamName("");
+      fetchTeams();
+    } catch (error) {
+      console.error("Error adding team:", error);
+      toast.error("An unexpected error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTeam = async (teamId: string) => {
+    if (!confirm("Are you sure you want to delete this team?")) {
       return;
     }
-    onAddTeam(newTeamName);
-    setNewTeamName("");
-    toast.success(`Team "${newTeamName}" added successfully`);
+
+    const { error } = await supabase.from("teams").delete().eq("id", teamId);
+
+    if (error) {
+      toast.error("Failed to delete team");
+      return;
+    }
+
+    toast.success("Team deleted");
+    fetchTeams();
+  };
+
+  const copyAccessCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    toast.success("Access code copied!");
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-4">
-        <Users className="h-5 w-5 text-primary" />
-        <h2 className="text-xl font-bold text-foreground">Team Management</h2>
-      </div>
+    <div className="space-y-6">
+      <Card className="p-6">
+        <h2 className="text-2xl font-bold mb-4">Add New Team</h2>
+        <form onSubmit={handleAddTeam} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="team-name">Team Name</Label>
+            <Input
+              id="team-name"
+              type="text"
+              placeholder="Enter team name"
+              value={newTeamName}
+              onChange={(e) => setNewTeamName(e.target.value)}
+              required
+            />
+          </div>
+          <Button type="submit" disabled={loading}>
+            <Plus className="w-4 h-4 mr-2" />
+            {loading ? "Creating..." : "Create Team"}
+          </Button>
+        </form>
+      </Card>
 
-      <div className="flex gap-2">
-        <Input
-          placeholder="Enter team name..."
-          value={newTeamName}
-          onChange={(e) => setNewTeamName(e.target.value)}
-          onKeyPress={(e) => e.key === "Enter" && handleAddTeam()}
-          className="flex-1 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
-        />
-        <Button onClick={handleAddTeam} className="bg-primary hover:bg-primary-glow">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Team
-        </Button>
-      </div>
-
-      {teams.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-4">
-          {teams.map((team) => (
-            <div
-              key={team.id}
-              className="flex items-center justify-between bg-secondary/50 border border-border rounded-lg px-4 py-2 hover:bg-secondary transition-colors"
-            >
-              <span className="font-medium text-foreground">{team.name}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  onRemoveTeam(team.id);
-                  toast.info(`Team "${team.name}" removed`);
-                }}
-                className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"
+      <Card className="p-6">
+        <h2 className="text-2xl font-bold mb-4">Teams & Access Codes</h2>
+        <div className="space-y-3">
+          {teams.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4">
+              No teams yet. Create your first team above.
+            </p>
+          ) : (
+            teams.map((team) => (
+              <div
+                key={team.id}
+                className="flex items-center justify-between p-4 border rounded-lg"
               >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+                <div className="flex-1">
+                  <h3 className="font-semibold">{team.name}</h3>
+                  {team.access_code && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <code className="text-sm bg-muted px-2 py-1 rounded">
+                        {team.access_code}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => copyAccessCode(team.access_code!)}
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => handleDeleteTeam(team.id)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))
+          )}
         </div>
-      )}
+      </Card>
+
+      <Card className="p-6 bg-primary/5 border-primary/20">
+        <h3 className="font-semibold mb-2">Admin Access Code</h3>
+        <div className="flex items-center gap-2">
+          <code className="text-sm bg-muted px-3 py-2 rounded">ADMIN2024</code>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => copyAccessCode("ADMIN2024")}
+          >
+            <Copy className="w-3 h-3" />
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Use this code to access admin features
+        </p>
+      </Card>
     </div>
   );
-};
-
-export default TeamManager;
+}

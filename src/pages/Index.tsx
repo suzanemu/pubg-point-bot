@@ -25,20 +25,20 @@ const Index = () => {
 
     setUserId(session.user.id);
 
-    // Fetch user role
-    const { data: roleData, error } = await supabase
-      .from("user_roles")
+    // Fetch user session to get role
+    const { data: sessionData, error } = await supabase
+      .from("sessions")
       .select("role")
       .eq("user_id", session.user.id)
       .single();
 
     if (error) {
-      console.error("Error fetching role:", error);
+      console.error("Error fetching session:", error);
       navigate("/auth");
       return;
     }
 
-    setUserRole(roleData.role);
+    setUserRole(sessionData.role);
     setLoading(false);
   };
 

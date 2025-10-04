@@ -18,14 +18,49 @@ interface PlayerDashboardProps {
 const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
   const navigate = useNavigate();
   const [teams, setTeams] = useState<Team[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [userTeam, setUserTeam] = useState<Team | null>(null);
   const [matchNumber, setMatchNumber] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
+    fetchUserTeam();
     fetchTeams();
-  }, []);
+  }, [userId]);
+
+  const fetchUserTeam = async () => {
+    // Get user's session to find their team
+    const { data: sessionData, error: sessionError } = await supabase
+      .from("sessions")
+      .select("team_id")
+      .eq("user_id", userId)
+      .single();
+
+    if (sessionError || !sessionData?.team_id) {
+      console.error("Error fetching user team:", sessionError);
+      return;
+    }
+
+    // Get team details
+    const { data: teamData, error: teamError } = await supabase
+      .from("teams")
+      .select("id, name, created_at")
+      .eq("id", sessionData.team_id)
+      .single();
+
+    if (teamError) {
+      console.error("Error fetching team details:", teamError);
+      return;
+    }
+
+    setUserTeam({
+      id: teamData.id,
+      name: teamData.name,
+      totalPoints: 0,
+      totalKills: 0,
+      matchesPlayed: 0,
+    });
+  };
 
   const fetchTeams = async () => {
     const { data, error } = await supabase
@@ -56,8 +91,8 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedTeamId) {
-      toast.error("Please select a team first");
+    if (!file || !userTeam) {
+      toast.error("Unable to identify your team");
       return;
     }
 
@@ -121,7 +156,7 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
       const { error: dbError } = await supabase
         .from("match_screenshots")
         .insert({
-          team_id: selectedTeamId,
+          team_id: userTeam.id,
           player_id: userId,
           match_number: matchNumber,
           screenshot_url: publicUrl,
@@ -180,22 +215,13 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
         {/* Upload Card */}
         <Card className="p-6 border-primary/30">
           <h2 className="text-2xl font-bold mb-4">Upload Match Screenshot</h2>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="team">Select Your Team</Label>
-              <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                <SelectTrigger className="bg-input border-border">
-                  <SelectValue placeholder="Choose your team" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams.map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {userTeam && (
+            <div className="mb-4 p-3 bg-primary/10 rounded-lg border border-primary/20">
+              <p className="text-sm text-muted-foreground">Your Team</p>
+              <p className="font-semibold text-lg">{userTeam.name}</p>
             </div>
+          )}
+          <div className="space-y-4">
 
             <div className="space-y-2">
               <Label htmlFor="matchNumber">Match Number</Label>
@@ -217,7 +243,7 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
                   type="file"
                   accept="image/*"
                   onChange={handleFileUpload}
-                  disabled={!selectedTeamId || uploading || analyzing}
+                  disabled={!userTeam || uploading || analyzing}
                   className="hidden"
                 />
                 <label

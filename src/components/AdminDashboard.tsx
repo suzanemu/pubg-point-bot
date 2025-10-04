@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import TeamManagement from "./TeamManagement";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import TeamManager from "./TeamManager";
 import Standings from "./Standings";
 import { Team } from "@/types/tournament";
 
@@ -14,7 +15,6 @@ interface AdminDashboardProps {
 const AdminDashboard = ({ userId }: AdminDashboardProps) => {
   const navigate = useNavigate();
   const [teams, setTeams] = useState<Team[]>([]);
-  const [showTeamManagement, setShowTeamManagement] = useState(false);
 
   useEffect(() => {
     fetchTeams();
@@ -58,32 +58,6 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
     }
   };
 
-  const handleAddTeam = async (teamName: string) => {
-    const { error } = await supabase
-      .from("teams")
-      .insert({ name: teamName, created_by: userId });
-
-    if (error) {
-      console.error("Error adding team:", error);
-      return;
-    }
-
-    fetchTeams();
-  };
-
-  const handleDeleteTeam = async (teamId: string) => {
-    const { error } = await supabase
-      .from("teams")
-      .delete()
-      .eq("id", teamId);
-
-    if (error) {
-      console.error("Error deleting team:", error);
-      return;
-    }
-
-    setTeams(teams.filter((t) => t.id !== teamId));
-  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -111,36 +85,27 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
           </Button>
         </div>
 
-        {/* Quick Actions */}
-        <Button
-          onClick={() => setShowTeamManagement(true)}
-          className="bg-gradient-primary hover:shadow-glow"
-          size="lg"
-        >
-          Manage Teams
-        </Button>
+        {/* Tabs */}
+        <Tabs defaultValue="standings" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="standings">Standings</TabsTrigger>
+            <TabsTrigger value="teams">Manage Teams</TabsTrigger>
+          </TabsList>
 
-        {/* Standings */}
-        {teams.length > 0 ? (
-          <Standings teams={teams} />
-        ) : (
-          <div className="text-center py-12 text-muted-foreground">
-            <p>No teams added yet. Start by adding teams.</p>
-          </div>
-        )}
+          <TabsContent value="standings" className="mt-6">
+            {teams.length > 0 ? (
+              <Standings teams={teams} />
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>No teams added yet. Go to Manage Teams to create teams.</p>
+              </div>
+            )}
+          </TabsContent>
 
-        {/* Team Management Modal */}
-        {showTeamManagement && (
-          <TeamManagement
-            teams={teams}
-            onAddTeam={handleAddTeam}
-            onClose={() => {
-              setShowTeamManagement(false);
-              fetchTeams();
-            }}
-            onDeleteTeam={handleDeleteTeam}
-          />
-        )}
+          <TabsContent value="teams" className="mt-6">
+            <TeamManager />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

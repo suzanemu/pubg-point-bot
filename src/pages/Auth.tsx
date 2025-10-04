@@ -5,20 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { z } from "zod";
-
-const emailSchema = z.string().email("Invalid email address");
-const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "player">("player");
+  const [accessCode, setAccessCode] = useState("");
 
   useEffect(() => {
     // Check if user is already logged in
@@ -29,98 +21,63 @@ const Auth = () => {
     });
   }, [navigate]);
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleAccessCode = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate inputs
-    try {
-      emailSchema.parse(email);
-      passwordSchema.parse(password);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
-        return;
-      }
-    }
-
-    setLoading(true);
-    
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      });
-
-      if (error) {
-        if (error.message.includes("already registered")) {
-          toast.error("This email is already registered. Please sign in instead.");
-        } else {
-          toast.error(error.message);
-        }
-        return;
-      }
-
-      if (data.user) {
-        // Insert user role
-        const { error: roleError } = await supabase
-          .from("user_roles")
-          .insert({ user_id: data.user.id, role });
-
-        if (roleError) {
-          console.error("Error creating role:", roleError);
-          toast.error("Account created but role assignment failed. Please contact support.");
-          return;
-        }
-
-        toast.success(`Account created successfully! Welcome ${role}!`);
-        navigate("/");
-      }
-    } catch (error) {
-      console.error("Signup error:", error);
-      toast.error("An unexpected error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validate inputs
-    try {
-      emailSchema.parse(email);
-      passwordSchema.parse(password);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
-        return;
-      }
+    if (!accessCode.trim()) {
+      toast.error("Please enter an access code");
+      return;
     }
 
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      // Sign in anonymously first
+      const { data: authData, error: authError } = await supabase.auth.signInAnonymously();
 
-      if (error) {
-        if (error.message.includes("Invalid login credentials")) {
-          toast.error("Incorrect email or password");
-        } else {
-          toast.error(error.message);
-        }
+      if (authError) {
+        toast.error("Authentication failed");
         return;
       }
 
-      toast.success("Signed in successfully!");
+      if (!authData.user) {
+        toast.error("Authentication failed");
+        return;
+      }
+
+      // Validate access code
+      const { data: codeData, error: codeError } = await supabase
+        .from("access_codes")
+        .select("role, team_id")
+        .eq("code", accessCode.trim().toUpperCase())
+        .single();
+
+      if (codeError || !codeData) {
+        await supabase.auth.signOut();
+        toast.error("Invalid access code");
+        return;
+      }
+
+      // Create session
+      const { error: sessionError } = await supabase
+        .from("sessions")
+        .insert({
+          user_id: authData.user.id,
+          code_used: accessCode.trim().toUpperCase(),
+          role: codeData.role,
+          team_id: codeData.team_id,
+        });
+
+      if (sessionError) {
+        await supabase.auth.signOut();
+        toast.error("Failed to create session");
+        return;
+      }
+
+      toast.success(`Welcome ${codeData.role}!`);
       navigate("/");
     } catch (error) {
-      console.error("Signin error:", error);
+      console.error("Access code error:", error);
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -137,106 +94,31 @@ const Auth = () => {
           <p className="text-muted-foreground">Esports Point Tracker</p>
         </div>
 
-        <Tabs defaultValue="signin" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="signin">Sign In</TabsTrigger>
-            <TabsTrigger value="signup">Sign Up</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="signin">
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signin-email">Email</Label>
-                <Input
-                  id="signin-email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="bg-input border-border"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signin-password">Password</Label>
-                <Input
-                  id="signin-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="bg-input border-border"
-                />
-              </div>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-primary hover:shadow-glow"
-              >
-                {loading ? "Signing in..." : "Sign In"}
-              </Button>
-            </form>
-          </TabsContent>
-
-          <TabsContent value="signup">
-            <form onSubmit={handleSignUp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signup-email">Email</Label>
-                <Input
-                  id="signup-email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="bg-input border-border"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signup-password">Password</Label>
-                <Input
-                  id="signup-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="bg-input border-border"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Minimum 6 characters
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Account Type</Label>
-                <RadioGroup value={role} onValueChange={(value) => setRole(value as "admin" | "player")}>
-                  <div className="flex items-center space-x-2 p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
-                    <RadioGroupItem value="player" id="player" />
-                    <Label htmlFor="player" className="flex-1 cursor-pointer">
-                      <span className="font-semibold">Player</span>
-                      <p className="text-sm text-muted-foreground">Upload match screenshots</p>
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
-                    <RadioGroupItem value="admin" id="admin" />
-                    <Label htmlFor="admin" className="flex-1 cursor-pointer">
-                      <span className="font-semibold">Admin</span>
-                      <p className="text-sm text-muted-foreground">Manage teams and view all data</p>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-secondary hover:shadow-glow"
-              >
-                {loading ? "Creating account..." : "Create Account"}
-              </Button>
-            </form>
-          </TabsContent>
-        </Tabs>
+        <form onSubmit={handleAccessCode} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="access-code">Access Code</Label>
+            <Input
+              id="access-code"
+              type="text"
+              placeholder="Enter your access code"
+              value={accessCode}
+              onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+              required
+              className="bg-input border-border uppercase text-center text-lg tracking-widest"
+              maxLength={20}
+            />
+            <p className="text-xs text-muted-foreground text-center">
+              Enter the access code provided by your admin
+            </p>
+          </div>
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-primary hover:shadow-glow"
+          >
+            {loading ? "Validating..." : "Enter"}
+          </Button>
+        </form>
       </Card>
     </div>
   );
