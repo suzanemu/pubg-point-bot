@@ -22,6 +22,7 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
   const [matchNumber, setMatchNumber] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
 
   useEffect(() => {
     fetchUserTeam();
@@ -90,104 +91,131 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !userTeam) {
+    const files = Array.from(e.target.files || []);
+    
+    if (files.length === 0 || !userTeam) {
       toast.error("Unable to identify your team");
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please upload an image file");
+    if (files.length > 4) {
+      toast.error("You can only upload up to 4 screenshots at once");
+      return;
+    }
+
+    // Check all files are images
+    const invalidFiles = files.filter(file => !file.type.startsWith("image/"));
+    if (invalidFiles.length > 0) {
+      toast.error("Please upload only image files");
       return;
     }
 
     setUploading(true);
+    let successCount = 0;
+    let failCount = 0;
 
     try {
-      // Upload to storage
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${userId}/${Date.now()}.${fileExt}`;
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("match-screenshots")
-        .upload(fileName, file);
+      // Process each file
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadProgress(`Processing ${i + 1} of ${files.length}...`);
 
-      if (uploadError) throw uploadError;
+        try {
+          // Upload to storage
+          const fileExt = file.name.split(".").pop();
+          const fileName = `${userId}/${Date.now()}_${i}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from("match-screenshots")
+            .upload(fileName, file);
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from("match-screenshots")
-        .getPublicUrl(fileName);
+          if (uploadError) throw uploadError;
 
-      setUploading(false);
-      setAnalyzing(true);
+          // Get public URL
+          const { data: { publicUrl } } = supabase.storage
+            .from("match-screenshots")
+            .getPublicUrl(fileName);
 
-      // Analyze screenshot with AI
-      const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
-        "analyze-screenshot",
-        {
-          body: { imageUrl: publicUrl },
+          setAnalyzing(true);
+
+          // Analyze screenshot with AI
+          const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
+            "analyze-screenshot",
+            {
+              body: { imageUrl: publicUrl },
+            }
+          );
+
+          setAnalyzing(false);
+
+          if (analysisError) {
+            console.error("Analysis error:", analysisError);
+            failCount++;
+            continue;
+          }
+
+          const { placement, kills } = analysisData;
+
+          if (placement === null || kills === null) {
+            failCount++;
+            continue;
+          }
+
+          // Calculate points
+          const PLACEMENT_POINTS: Record<number, number> = {
+            1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1,
+          };
+          const placementPoints = PLACEMENT_POINTS[placement] || 0;
+          const points = placementPoints + kills;
+
+          // Save to database
+          const { error: dbError } = await supabase
+            .from("match_screenshots")
+            .insert({
+              team_id: userTeam.id,
+              player_id: userId,
+              match_number: matchNumber + i,
+              screenshot_url: publicUrl,
+              placement,
+              kills,
+              points,
+              analyzed_at: new Date().toISOString(),
+            });
+
+          if (dbError) {
+            console.error("Database error:", dbError);
+            failCount++;
+          } else {
+            successCount++;
+          }
+        } catch (error) {
+          console.error("Error processing file:", error);
+          failCount++;
         }
-      );
-
-      setAnalyzing(false);
-
-      if (analysisError) {
-        console.error("Analysis error:", analysisError);
-        toast.error("Failed to analyze screenshot");
-        return;
       }
 
-      const { placement, kills } = analysisData;
-
-      if (placement === null || kills === null) {
-        toast.error("Could not extract data from screenshot. Please try another image.");
-        return;
+      // Show results
+      if (successCount > 0) {
+        toast.success(`Successfully uploaded ${successCount} screenshot${successCount > 1 ? 's' : ''}!`);
+        setMatchNumber(matchNumber + successCount);
       }
-
-      // Calculate points
-      const PLACEMENT_POINTS: Record<number, number> = {
-        1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1,
-      };
-      const placementPoints = PLACEMENT_POINTS[placement] || 0;
-      const points = placementPoints + kills;
-
-      // Save to database
-      const { error: dbError } = await supabase
-        .from("match_screenshots")
-        .insert({
-          team_id: userTeam.id,
-          player_id: userId,
-          match_number: matchNumber,
-          screenshot_url: publicUrl,
-          placement,
-          kills,
-          points,
-          analyzed_at: new Date().toISOString(),
-        });
-
-      if (dbError) {
-        console.error("Database error:", dbError);
-        toast.error("Failed to save match data");
-        return;
+      
+      if (failCount > 0) {
+        toast.error(`Failed to process ${failCount} screenshot${failCount > 1 ? 's' : ''}`);
       }
-
-      toast.success(
-        `Match recorded! Placement: #${placement}, Kills: ${kills}, Points: ${points}`
-      );
       
       // Reset form
-      setMatchNumber(matchNumber + 1);
       e.target.value = "";
       
       // Refresh teams
       fetchTeams();
     } catch (error) {
       console.error("Upload error:", error);
-      toast.error("Failed to upload screenshot");
+      toast.error("Failed to upload screenshots");
     } finally {
       setUploading(false);
       setAnalyzing(false);
+      setUploadProgress("");
     }
   };
 
@@ -236,12 +264,13 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="screenshot">Upload Screenshot</Label>
+              <Label htmlFor="screenshot">Upload Screenshots (Max 4)</Label>
               <div className="border-2 border-dashed border-primary/30 rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
                 <input
                   id="screenshot"
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleFileUpload}
                   disabled={!userTeam || uploading || analyzing}
                   className="hidden"
@@ -254,20 +283,20 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
                     <>
                       <Loader2 className="h-12 w-12 text-primary animate-spin" />
                       <p className="text-lg font-semibold">
-                        {uploading ? "Uploading..." : "Analyzing with AI..."}
+                        {uploadProgress || (uploading ? "Uploading..." : "Analyzing with AI...")}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Please wait while we process your screenshot
+                        Please wait while we process your screenshots
                       </p>
                     </>
                   ) : (
                     <>
                       <Upload className="h-12 w-12 text-primary" />
                       <p className="text-lg font-semibold">
-                        Click to upload screenshot
+                        Click to upload screenshots (up to 4)
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        AI will automatically extract placement and kills
+                        AI will automatically extract placement and kills from each
                       </p>
                     </>
                   )}
