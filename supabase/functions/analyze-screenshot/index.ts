@@ -32,26 +32,32 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are analyzing PUBG Mobile match result screenshots. Extract the following information:
-1. Placement (rank) - look for numbers like "#1", "#2", "Winner Winner Chicken Dinner", "1st Place", etc.
-2. Kills count - look for kill statistics, eliminations, or kill count
+            content: `You are analyzing PUBG Mobile team match result screenshots. Extract the following information:
+
+CRITICAL INSTRUCTIONS:
+1. PLACEMENT (RED CIRCLE): Look at the TOP-LEFT of the screen for a large number with "#" symbol
+   - Example: "#13" means placement 13, "#1" means placement 1
+   - This is the team's final rank/position in the match (1-32)
+   - May also show "WINNER WINNER CHICKEN DINNER" for 1st place
+
+2. KILLS (GREEN CIRCLE): Look for the "Eliminations" column in the player stats table
+   - Sum up ALL elimination numbers for all team members in the green-circled column
+   - Each player has a row, add all their elimination counts together
+   - Example: If players have 0, 3, 0, 2 eliminations, total kills = 5
 
 Return ONLY a JSON object with this exact structure:
-{"placement": <number 1-16>, "kills": <number>}
+{"placement": <number>, "kills": <total_team_kills>}
 
-If you cannot find the information, use: {"placement": null, "kills": null}
+If you cannot find the information clearly, use: {"placement": null, "kills": null}
 
-Important: Extract placement as a number from 1-16. Common indicators:
-- "Winner Winner Chicken Dinner" or "#1" = placement 1
-- "#2" or "2nd Place" = placement 2
-- Look for rank/position numbers on the screen`
+The placement should be a number from 1-32. The kills should be the sum of all team member eliminations.`
           },
           {
             role: "user",
             content: [
               {
-                type: "text",
-                text: "Analyze this PUBG Mobile match result screenshot and extract the placement (1-16) and kills count."
+              type: "text",
+              text: "Analyze this PUBG Mobile team match result screenshot. Look for: 1) The placement number (with # symbol) in the TOP-LEFT area, 2) Sum all the elimination numbers in the 'Eliminations' column for all team members."
               },
               {
                 type: "image_url",
@@ -115,7 +121,7 @@ Important: Extract placement as a number from 1-16. Common indicators:
     console.log("Parsed result:", result);
 
     // Validate the result
-    if (result.placement !== null && (result.placement < 1 || result.placement > 16)) {
+    if (result.placement !== null && (result.placement < 1 || result.placement > 32)) {
       console.error("Invalid placement:", result.placement);
       result.placement = null;
     }
