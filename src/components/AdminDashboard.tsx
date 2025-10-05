@@ -79,6 +79,7 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
         const teamMatches = matchData?.filter((m) => m.team_id === team.id) || [];
         const totalPoints = teamMatches.reduce((sum, m) => sum + (m.points || 0), 0);
         const totalKills = teamMatches.reduce((sum, m) => sum + (m.kills || 0), 0);
+        const firstPlaceWins = teamMatches.filter((m) => m.placement === 1).length;
         
         let placementPoints = 0;
         teamMatches.forEach((match) => {
@@ -99,6 +100,7 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
           killPoints: totalKills,
           totalKills,
           matchesPlayed: teamMatches.length,
+          firstPlaceWins,
         };
       });
 

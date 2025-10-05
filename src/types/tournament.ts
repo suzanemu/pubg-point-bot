@@ -6,6 +6,7 @@ export interface Team {
   killPoints: number;
   totalKills: number;
   matchesPlayed: number;
+  firstPlaceWins: number;
   tournament_id?: string;
 }
 

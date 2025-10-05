@@ -86,10 +86,12 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
     let placementPoints = 0;
     let killPoints = 0;
     let matchesPlayed = 0;
+    let firstPlaceWins = 0;
 
     if (matchData && !matchError) {
       matchesPlayed = matchData.length;
       setUploadedMatches(matchData.length);
+      firstPlaceWins = matchData.filter((m) => m.placement === 1).length;
       
       matchData.forEach((match) => {
         totalKills += match.kills || 0;
@@ -115,6 +117,7 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
       killPoints,
       totalKills,
       matchesPlayed,
+      firstPlaceWins,
       tournament_id: teamData.tournament_id,
     });
   };
@@ -143,6 +146,7 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
         let totalPoints = 0;
         let totalKills = 0;
         let placementPoints = 0;
+        const firstPlaceWins = teamMatches.filter((m) => m.placement === 1).length;
 
         teamMatches.forEach((match) => {
           totalKills += match.kills || 0;
@@ -166,6 +170,7 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
           killPoints: totalKills, // 1 point per kill
           totalKills,
           matchesPlayed: teamMatches.length,
+          firstPlaceWins,
         };
       });
       setTeams(teamsData);
