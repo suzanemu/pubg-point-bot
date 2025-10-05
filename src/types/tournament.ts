@@ -49,6 +49,8 @@ export const PLACEMENT_POINTS: Record<number, number> = {
   14: 0,
   15: 0,
   16: 0,
+  17: 0,
+  18: 0,
 };
 
 export const KILL_POINTS = 1;
