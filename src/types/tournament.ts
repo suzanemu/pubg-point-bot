@@ -6,6 +6,17 @@ export interface Team {
   killPoints: number;
   totalKills: number;
   matchesPlayed: number;
+  tournament_id?: string;
+}
+
+export interface Tournament {
+  id: string;
+  name: string;
+  description?: string;
+  total_matches: number;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface MatchResult {

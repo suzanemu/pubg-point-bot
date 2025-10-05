@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Upload, LogOut, Loader2, Trophy } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Upload, LogOut, Loader2, Trophy, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import Standings from "./Standings";
-import { Team } from "@/types/tournament";
+import { Team, Tournament } from "@/types/tournament";
 
 interface PlayerDashboardProps {
   userId: string;
@@ -18,10 +19,12 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
   const navigate = useNavigate();
   const [teams, setTeams] = useState<Team[]>([]);
   const [userTeam, setUserTeam] = useState<Team | null>(null);
+  const [tournament, setTournament] = useState<Tournament | null>(null);
   const [matchNumber, setMatchNumber] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [uploadedMatches, setUploadedMatches] = useState<number>(0);
 
   useEffect(() => {
     fetchUserTeam();
@@ -52,7 +55,7 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
     // Get team details
     const { data: teamData, error: teamError } = await supabase
       .from("teams")
-      .select("id, name, created_at")
+      .select("id, name, created_at, tournament_id")
       .eq("id", sessionData.team_id)
       .single();
 
@@ -61,10 +64,21 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
       return;
     }
 
+    // Fetch tournament info if team has one
+    if (teamData.tournament_id) {
+      const { data: tournamentData } = await supabase
+        .from("tournaments")
+        .select("*")
+        .eq("id", teamData.tournament_id)
+        .single();
+      
+      setTournament(tournamentData);
+    }
+
     // Get team stats from match_screenshots
     const { data: matchData, error: matchError } = await supabase
       .from("match_screenshots")
-      .select("placement, kills, points")
+      .select("placement, kills, points, match_number")
       .eq("team_id", sessionData.team_id);
 
     let totalPoints = 0;
@@ -75,6 +89,8 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
 
     if (matchData && !matchError) {
       matchesPlayed = matchData.length;
+      setUploadedMatches(matchData.length);
+      
       matchData.forEach((match) => {
         totalKills += match.kills || 0;
         totalPoints += match.points || 0;
@@ -99,13 +115,17 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
       killPoints,
       totalKills,
       matchesPlayed,
+      tournament_id: teamData.tournament_id,
     });
   };
 
   const fetchTeams = async () => {
+    if (!userTeam?.tournament_id) return;
+
     const { data, error } = await supabase
       .from("teams")
-      .select("id, name, created_at");
+      .select("id, name, created_at")
+      .eq("tournament_id", userTeam.tournament_id);
 
     if (error) {
       console.error("Error fetching teams:", error);
@@ -162,6 +182,19 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
     
     if (files.length === 0 || !userTeam) {
       toast.error("Unable to identify your team");
+      return;
+    }
+
+    // Check match limit
+    if (tournament && uploadedMatches >= tournament.total_matches) {
+      toast.error(`You have reached the maximum number of matches (${tournament.total_matches}) for this tournament`);
+      return;
+    }
+
+    // Check if adding these files would exceed the limit
+    if (tournament && (uploadedMatches + files.length) > tournament.total_matches) {
+      const remaining = tournament.total_matches - uploadedMatches;
+      toast.error(`You can only upload ${remaining} more screenshot${remaining > 1 ? 's' : ''} for this tournament`);
       return;
     }
 
@@ -277,7 +310,8 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
       // Reset form
       e.target.value = "";
       
-      // Refresh teams
+      // Refresh data
+      fetchUserTeam();
       fetchTeams();
     } catch (error) {
       console.error("Upload error:", error);
@@ -288,6 +322,8 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
       setUploadProgress("");
     }
   };
+
+  const canUploadMore = !tournament || uploadedMatches < tournament.total_matches;
 
   return (
     <div className="min-h-screen p-4 md:p-8">
@@ -309,6 +345,44 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
             Sign Out
           </Button>
         </div>
+
+        {/* Tournament Info Card */}
+        {tournament && (
+          <Card className="p-6 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Trophy className="h-6 w-6 text-primary-glow" />
+              Tournament Info
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-lg">{tournament.name}</h3>
+                {tournament.description && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {tournament.description}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 bg-background/50 rounded-lg border border-border">
+                  <p className="text-sm text-muted-foreground">Total Matches</p>
+                  <p className="text-2xl font-bold">{tournament.total_matches}</p>
+                </div>
+                <div className="text-center p-4 bg-background/50 rounded-lg border border-primary/30">
+                  <p className="text-sm text-muted-foreground">Uploaded</p>
+                  <p className="text-2xl font-bold text-primary">{uploadedMatches}</p>
+                </div>
+              </div>
+              {!canUploadMore && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    You have uploaded all {tournament.total_matches} matches for this tournament.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Team Stats Card */}
         {userTeam && (
@@ -372,12 +446,12 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
                   accept="image/*"
                   multiple
                   onChange={handleFileUpload}
-                  disabled={!userTeam || uploading || analyzing}
+                  disabled={!userTeam || uploading || analyzing || !canUploadMore}
                   className="hidden"
                 />
                 <label
                   htmlFor="screenshot"
-                  className="cursor-pointer flex flex-col items-center gap-2"
+                  className={`${!canUploadMore ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} flex flex-col items-center gap-2`}
                 >
                   {uploading || analyzing ? (
                     <>
@@ -393,10 +467,14 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
                     <>
                       <Upload className="h-12 w-12 text-primary" />
                       <p className="text-lg font-semibold">
-                        Click to upload screenshots (up to 4)
+                        {canUploadMore 
+                          ? "Click to upload screenshots (up to 4)"
+                          : "Match limit reached"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        AI will automatically extract placement and kills from each
+                        {canUploadMore 
+                          ? "AI will automatically extract placement and kills from each"
+                          : "You have uploaded all allowed matches"}
                       </p>
                     </>
                   )}

@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TeamManager from "./TeamManager";
+import TournamentManager from "./TournamentManager";
 import Standings from "./Standings";
-import { Team } from "@/types/tournament";
+import { Team, Tournament } from "@/types/tournament";
 
 interface AdminDashboardProps {
   userId: string;
@@ -15,20 +17,48 @@ interface AdminDashboardProps {
 const AdminDashboard = ({ userId }: AdminDashboardProps) => {
   const navigate = useNavigate();
   const [teams, setTeams] = useState<Team[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [selectedTournament, setSelectedTournament] = useState<string>("");
 
   useEffect(() => {
-    fetchTeams();
-    
-    // Auto-refresh every 5 seconds
-    const interval = setInterval(fetchTeams, 5000);
-    
-    return () => clearInterval(interval);
+    fetchTournaments();
   }, []);
 
+  useEffect(() => {
+    if (selectedTournament) {
+      fetchTeams();
+      
+      // Auto-refresh every 5 seconds
+      const interval = setInterval(fetchTeams, 5000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [selectedTournament]);
+
+  const fetchTournaments = async () => {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching tournaments:", error);
+      return;
+    }
+
+    setTournaments(data || []);
+    if (data && data.length > 0 && !selectedTournament) {
+      setSelectedTournament(data[0].id);
+    }
+  };
+
   const fetchTeams = async () => {
+    if (!selectedTournament) return;
+
     const { data: teamsData, error: teamsError } = await supabase
       .from("teams")
-      .select("id, name, created_at");
+      .select("id, name, created_at")
+      .eq("tournament_id", selectedTournament);
 
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);
@@ -103,25 +133,53 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
           </Button>
         </div>
 
+        {/* Tournament Selection */}
+        {tournaments.length > 0 && (
+          <Select value={selectedTournament} onValueChange={setSelectedTournament}>
+            <SelectTrigger className="w-full max-w-md">
+              <SelectValue placeholder="Select a tournament" />
+            </SelectTrigger>
+            <SelectContent>
+              {tournaments.map((tournament) => (
+                <SelectItem key={tournament.id} value={tournament.id}>
+                  {tournament.name} ({tournament.total_matches} matches)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {/* Tabs */}
         <Tabs defaultValue="standings" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="standings">Standings</TabsTrigger>
             <TabsTrigger value="teams">Manage Teams</TabsTrigger>
+            <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
           </TabsList>
 
           <TabsContent value="standings" className="mt-6">
-            {teams.length > 0 ? (
+            {teams.length > 0 && selectedTournament ? (
               <Standings teams={teams} />
             ) : (
               <div className="text-center py-12 text-muted-foreground">
-                <p>No teams added yet. Go to Manage Teams to create teams.</p>
+                <p>
+                  {!selectedTournament
+                    ? "Please create a tournament first."
+                    : "No teams added yet. Go to Manage Teams to create teams."}
+                </p>
               </div>
             )}
           </TabsContent>
 
           <TabsContent value="teams" className="mt-6">
             <TeamManager />
+          </TabsContent>
+
+          <TabsContent value="tournaments" className="mt-6">
+            <TournamentManager onTournamentSelect={(id) => {
+              if (id) setSelectedTournament(id);
+              fetchTournaments();
+            }} />
           </TabsContent>
         </Tabs>
       </div>

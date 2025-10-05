@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Copy, Plus, Trash2 } from "lucide-react";
+import { Tournament } from "@/types/tournament";
 
 interface Team {
   id: string;
@@ -15,17 +17,45 @@ interface Team {
 
 export default function TeamManager() {
   const [teams, setTeams] = useState<Team[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [selectedTournament, setSelectedTournament] = useState<string>("");
   const [newTeamName, setNewTeamName] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchTeams();
+    fetchTournaments();
   }, []);
 
+  useEffect(() => {
+    if (selectedTournament) {
+      fetchTeams();
+    }
+  }, [selectedTournament]);
+
+  const fetchTournaments = async () => {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching tournaments:", error);
+      return;
+    }
+
+    setTournaments(data || []);
+    if (data && data.length > 0 && !selectedTournament) {
+      setSelectedTournament(data[0].id);
+    }
+  };
+
   const fetchTeams = async () => {
+    if (!selectedTournament) return;
+
     const { data: teamsData, error: teamsError } = await supabase
       .from("teams")
-      .select("id, name");
+      .select("id, name")
+      .eq("tournament_id", selectedTournament);
 
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);
@@ -36,7 +66,8 @@ export default function TeamManager() {
     const { data: codesData } = await supabase
       .from("access_codes")
       .select("team_id, code")
-      .eq("role", "player");
+      .eq("role", "player")
+      .eq("tournament_id", selectedTournament);
 
     const teamsWithCodes = teamsData.map((team) => ({
       ...team,
@@ -58,6 +89,11 @@ export default function TeamManager() {
   const handleAddTeam = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!selectedTournament) {
+      toast.error("Please select a tournament first");
+      return;
+    }
+
     if (!newTeamName.trim()) {
       toast.error("Please enter a team name");
       return;
@@ -69,7 +105,7 @@ export default function TeamManager() {
       // Create team
       const { data: teamData, error: teamError } = await supabase
         .from("teams")
-        .insert({ name: newTeamName.trim() })
+        .insert({ name: newTeamName.trim(), tournament_id: selectedTournament })
         .select()
         .single();
 
@@ -86,6 +122,7 @@ export default function TeamManager() {
           code: accessCode,
           role: "player",
           team_id: teamData.id,
+          tournament_id: selectedTournament,
         });
 
       if (codeError) {
@@ -125,8 +162,34 @@ export default function TeamManager() {
     toast.success("Access code copied!");
   };
 
+  if (tournaments.length === 0) {
+    return (
+      <Card className="p-6">
+        <p className="text-center text-muted-foreground">
+          Please create a tournament first before adding teams.
+        </p>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      <Card className="p-6">
+        <h2 className="text-2xl font-bold mb-4">Select Tournament</h2>
+        <Select value={selectedTournament} onValueChange={setSelectedTournament}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select a tournament" />
+          </SelectTrigger>
+          <SelectContent>
+            {tournaments.map((tournament) => (
+              <SelectItem key={tournament.id} value={tournament.id}>
+                {tournament.name} ({tournament.total_matches} matches)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Card>
+
       <Card className="p-6">
         <h2 className="text-2xl font-bold mb-4">Add New Team</h2>
         <form onSubmit={handleAddTeam} className="space-y-4">
