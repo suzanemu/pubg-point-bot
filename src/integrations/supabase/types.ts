@@ -21,6 +21,7 @@ export type Database = {
           id: string
           role: Database["public"]["Enums"]["app_role"]
           team_id: string | null
+          tournament_id: string | null
         }
         Insert: {
           code: string
@@ -28,6 +29,7 @@ export type Database = {
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           team_id?: string | null
+          tournament_id?: string | null
         }
         Update: {
           code?: string
@@ -35,6 +37,7 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           team_id?: string | null
+          tournament_id?: string | null
         }
         Relationships: [
           {
@@ -42,6 +45,13 @@ export type Database = {
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_codes_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
             referencedColumns: ["id"]
           },
         ]
@@ -137,18 +147,59 @@ export type Database = {
           created_by: string | null
           id: string
           name: string
+          tournament_id: string | null
         }
         Insert: {
           created_at?: string | null
           created_by?: string | null
           id?: string
           name: string
+          tournament_id?: string | null
         }
         Update: {
           created_at?: string | null
           created_by?: string | null
           id?: string
           name?: string
+          tournament_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournaments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          total_matches: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          total_matches: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          total_matches?: number
+          updated_at?: string
         }
         Relationships: []
       }
