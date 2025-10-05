@@ -28,12 +28,18 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
 
   useEffect(() => {
     fetchUserTeam();
-    fetchTeams();
-    
+  }, [userId]);
+
+  useEffect(() => {
+    if (userTeam?.tournament_id) {
+      fetchTeams();
+    }
+  }, [userTeam?.tournament_id]);
+
+  useEffect(() => {
     // Auto-refresh every 5 seconds
     const interval = setInterval(() => {
       fetchUserTeam();
-      fetchTeams();
     }, 5000);
     
     return () => clearInterval(interval);
