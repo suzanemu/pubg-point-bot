@@ -31,7 +31,7 @@ const Standings = ({ teams }: StandingsProps) => {
         <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center mr-2 flex-shrink-0">
           <Trophy className="h-3 w-3 text-primary" />
         </div>
-        <span className="font-bold text-sm truncate">{team.name}</span>
+        <span className="font-bold text-sm truncate text-foreground">{team.name}</span>
       </div>
 
       {/* Matches */}
