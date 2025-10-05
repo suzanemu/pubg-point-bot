@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TeamManager from "./TeamManager";
 import TournamentManager from "./TournamentManager";
+import ScreenshotVerification from "./ScreenshotVerification";
 import Standings from "./Standings";
 import { Team, Tournament } from "@/types/tournament";
 
@@ -153,8 +154,9 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
 
         {/* Tabs */}
         <Tabs defaultValue="standings" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="standings">Standings</TabsTrigger>
+            <TabsTrigger value="screenshots">Verify Screenshots</TabsTrigger>
             <TabsTrigger value="teams">Manage Teams</TabsTrigger>
             <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
           </TabsList>
@@ -169,6 +171,16 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
                     ? "Please create a tournament first."
                     : "No teams added yet. Go to Manage Teams to create teams."}
                 </p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="screenshots" className="mt-6">
+            {selectedTournament ? (
+              <ScreenshotVerification selectedTournament={selectedTournament} />
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>Please select a tournament first.</p>
               </div>
             )}
           </TabsContent>
