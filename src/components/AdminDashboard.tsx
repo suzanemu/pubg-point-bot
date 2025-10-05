@@ -18,6 +18,11 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
 
   useEffect(() => {
     fetchTeams();
+    
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(fetchTeams, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchTeams = async () => {
@@ -44,11 +49,24 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
         const teamMatches = matchData?.filter((m) => m.team_id === team.id) || [];
         const totalPoints = teamMatches.reduce((sum, m) => sum + (m.points || 0), 0);
         const totalKills = teamMatches.reduce((sum, m) => sum + (m.kills || 0), 0);
+        
+        let placementPoints = 0;
+        teamMatches.forEach((match) => {
+          const PLACEMENT_POINTS: Record<number, number> = {
+            1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1,
+            9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0, 16: 0,
+            17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0, 24: 0,
+            25: 0, 26: 0, 27: 0, 28: 0, 29: 0, 30: 0, 31: 0, 32: 0,
+          };
+          placementPoints += PLACEMENT_POINTS[match.placement || 0] || 0;
+        });
 
         return {
           id: team.id,
           name: team.name,
           totalPoints,
+          placementPoints,
+          killPoints: totalKills,
           totalKills,
           matchesPlayed: teamMatches.length,
         };

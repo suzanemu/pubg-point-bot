@@ -3,9 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Upload, LogOut, Loader2 } from "lucide-react";
+import { Upload, LogOut, Loader2, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import Standings from "./Standings";
@@ -27,6 +26,14 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
   useEffect(() => {
     fetchUserTeam();
     fetchTeams();
+    
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(() => {
+      fetchUserTeam();
+      fetchTeams();
+    }, 5000);
+    
+    return () => clearInterval(interval);
   }, [userId]);
 
   const fetchUserTeam = async () => {
@@ -54,12 +61,44 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
       return;
     }
 
+    // Get team stats from match_screenshots
+    const { data: matchData, error: matchError } = await supabase
+      .from("match_screenshots")
+      .select("placement, kills, points")
+      .eq("team_id", sessionData.team_id);
+
+    let totalPoints = 0;
+    let totalKills = 0;
+    let placementPoints = 0;
+    let killPoints = 0;
+    let matchesPlayed = 0;
+
+    if (matchData && !matchError) {
+      matchesPlayed = matchData.length;
+      matchData.forEach((match) => {
+        totalKills += match.kills || 0;
+        totalPoints += match.points || 0;
+        
+        // Calculate placement points (total - kills)
+        const PLACEMENT_POINTS: Record<number, number> = {
+          1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1,
+          9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0, 16: 0,
+          17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0, 24: 0,
+          25: 0, 26: 0, 27: 0, 28: 0, 29: 0, 30: 0, 31: 0, 32: 0,
+        };
+        placementPoints += PLACEMENT_POINTS[match.placement || 0] || 0;
+      });
+      killPoints = totalKills; // 1 point per kill
+    }
+
     setUserTeam({
       id: teamData.id,
       name: teamData.name,
-      totalPoints: 0,
-      totalKills: 0,
-      matchesPlayed: 0,
+      totalPoints,
+      placementPoints,
+      killPoints,
+      totalKills,
+      matchesPlayed,
     });
   };
 
@@ -74,13 +113,41 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
     }
 
     if (data) {
-      const teamsData: Team[] = data.map((team) => ({
-        id: team.id,
-        name: team.name,
-        totalPoints: 0,
-        totalKills: 0,
-        matchesPlayed: 0,
-      }));
+      // Fetch all match data
+      const { data: allMatches } = await supabase
+        .from("match_screenshots")
+        .select("team_id, placement, kills, points");
+
+      const teamsData: Team[] = data.map((team) => {
+        const teamMatches = allMatches?.filter((m) => m.team_id === team.id) || [];
+        let totalPoints = 0;
+        let totalKills = 0;
+        let placementPoints = 0;
+
+        teamMatches.forEach((match) => {
+          totalKills += match.kills || 0;
+          totalPoints += match.points || 0;
+          
+          // Calculate placement points
+          const PLACEMENT_POINTS: Record<number, number> = {
+            1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1,
+            9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0, 16: 0,
+            17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 0, 23: 0, 24: 0,
+            25: 0, 26: 0, 27: 0, 28: 0, 29: 0, 30: 0, 31: 0, 32: 0,
+          };
+          placementPoints += PLACEMENT_POINTS[match.placement || 0] || 0;
+        });
+
+        return {
+          id: team.id,
+          name: team.name,
+          totalPoints,
+          placementPoints,
+          killPoints: totalKills, // 1 point per kill
+          totalKills,
+          matchesPlayed: teamMatches.length,
+        };
+      });
       setTeams(teamsData);
     }
   };
@@ -243,15 +310,45 @@ const PlayerDashboard = ({ userId }: PlayerDashboardProps) => {
           </Button>
         </div>
 
+        {/* Team Stats Card */}
+        {userTeam && (
+          <Card className="p-6 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Trophy className="h-6 w-6 text-primary-glow" />
+              Your Team Stats
+            </h2>
+            <div className="mb-4 p-3 bg-background/50 rounded-lg border border-primary/20">
+              <p className="text-sm text-muted-foreground">Team Name</p>
+              <p className="font-semibold text-xl">{userTeam.name}</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="text-center p-4 bg-background/50 rounded-lg border border-border">
+                <p className="text-sm text-muted-foreground mb-1">Matches</p>
+                <p className="text-2xl font-bold">{userTeam.matchesPlayed}</p>
+              </div>
+              <div className="text-center p-4 bg-background/50 rounded-lg border border-yellow-500/30">
+                <p className="text-sm text-muted-foreground mb-1">Place Points</p>
+                <p className="text-2xl font-bold text-yellow-500">{userTeam.placementPoints}</p>
+              </div>
+              <div className="text-center p-4 bg-background/50 rounded-lg border border-accent/30">
+                <p className="text-sm text-muted-foreground mb-1">Kill Points</p>
+                <p className="text-2xl font-bold text-accent">{userTeam.killPoints}</p>
+              </div>
+              <div className="text-center p-4 bg-background/50 rounded-lg border border-border">
+                <p className="text-sm text-muted-foreground mb-1">Total Kills</p>
+                <p className="text-2xl font-bold">{userTeam.totalKills}</p>
+              </div>
+              <div className="text-center p-4 bg-primary/20 rounded-lg border border-primary/50">
+                <p className="text-sm text-muted-foreground mb-1">Total Points</p>
+                <p className="text-3xl font-bold text-primary-glow">{userTeam.totalPoints}</p>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Upload Card */}
         <Card className="p-6 border-primary/30">
           <h2 className="text-2xl font-bold mb-4">Upload Match Screenshot</h2>
-          {userTeam && (
-            <div className="mb-4 p-3 bg-primary/10 rounded-lg border border-primary/20">
-              <p className="text-sm text-muted-foreground">Your Team</p>
-              <p className="font-semibold text-lg">{userTeam.name}</p>
-            </div>
-          )}
           <div className="space-y-4">
 
             <div className="space-y-2">

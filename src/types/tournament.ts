@@ -2,6 +2,8 @@ export interface Team {
   id: string;
   name: string;
   totalPoints: number;
+  placementPoints: number;
+  killPoints: number;
   totalKills: number;
   matchesPlayed: number;
 }
