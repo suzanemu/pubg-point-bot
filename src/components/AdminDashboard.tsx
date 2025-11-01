@@ -191,7 +191,7 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
 
           <TabsContent value="tournaments" className="mt-6">
             <TournamentManager onTournamentSelect={(id) => {
-              if (id) setSelectedTournament(id);
+              setSelectedTournament(id || "");
               fetchTournaments();
             }} />
           </TabsContent>
