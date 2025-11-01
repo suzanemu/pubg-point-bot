@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Copy, Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2, Trophy } from "lucide-react";
 import { Tournament } from "@/types/tournament";
 
 interface Team {
   id: string;
   name: string;
   access_code?: string;
+  logo_url?: string;
 }
 
 export default function TeamManager() {
@@ -21,6 +22,7 @@ export default function TeamManager() {
   const [selectedTournament, setSelectedTournament] = useState<string>("");
   const [newTeamName, setNewTeamName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   useEffect(() => {
     fetchTournaments();
@@ -54,7 +56,7 @@ export default function TeamManager() {
 
     const { data: teamsData, error: teamsError } = await supabase
       .from("teams")
-      .select("id, name")
+      .select("id, name, logo_url")
       .eq("tournament_id", selectedTournament);
 
     if (teamsError) {
@@ -102,10 +104,38 @@ export default function TeamManager() {
     setLoading(true);
 
     try {
+      let logoUrl = null;
+
+      // Upload logo if provided
+      if (logoFile) {
+        const fileExt = logoFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${selectedTournament}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('team-logos')
+          .upload(filePath, logoFile);
+
+        if (uploadError) {
+          toast.error("Failed to upload logo");
+          return;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('team-logos')
+          .getPublicUrl(filePath);
+
+        logoUrl = publicUrl;
+      }
+
       // Create team
       const { data: teamData, error: teamError } = await supabase
         .from("teams")
-        .insert({ name: newTeamName.trim(), tournament_id: selectedTournament })
+        .insert({ 
+          name: newTeamName.trim(), 
+          tournament_id: selectedTournament,
+          logo_url: logoUrl 
+        })
         .select()
         .single();
 
@@ -132,6 +162,7 @@ export default function TeamManager() {
 
       toast.success(`Team created! Access code: ${accessCode}`);
       setNewTeamName("");
+      setLogoFile(null);
       fetchTeams();
     } catch (error) {
       console.error("Error adding team:", error);
@@ -204,6 +235,19 @@ export default function TeamManager() {
               required
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="team-logo">Team Logo (Optional)</Label>
+            <Input
+              id="team-logo"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+              className="cursor-pointer"
+            />
+            <p className="text-xs text-muted-foreground">
+              Upload a team logo image (PNG, JPG, etc.)
+            </p>
+          </div>
           <Button type="submit" disabled={loading}>
             <Plus className="w-4 h-4 mr-2" />
             {loading ? "Creating..." : "Create Team"}
@@ -224,22 +268,35 @@ export default function TeamManager() {
                 key={team.id}
                 className="flex items-center justify-between p-4 border rounded-lg"
               >
-                <div className="flex-1">
-                  <h3 className="font-semibold">{team.name}</h3>
-                  {team.access_code && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <code className="text-sm bg-muted px-2 py-1 rounded">
-                        {team.access_code}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => copyAccessCode(team.access_code!)}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
+                <div className="flex items-center gap-3 flex-1">
+                  {team.logo_url ? (
+                    <img 
+                      src={team.logo_url} 
+                      alt={`${team.name} logo`}
+                      className="w-10 h-10 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center">
+                      <Trophy className="h-5 w-5 text-primary" />
                     </div>
                   )}
+                  <div>
+                    <h3 className="font-semibold">{team.name}</h3>
+                    {team.access_code && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-sm bg-muted px-2 py-1 rounded">
+                          {team.access_code}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyAccessCode(team.access_code!)}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <Button
                   size="sm"

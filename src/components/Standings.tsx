@@ -28,9 +28,17 @@ const Standings = ({ teams }: StandingsProps) => {
 
       {/* Team Name */}
       <div className="flex items-center min-w-0">
-        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center mr-2 flex-shrink-0">
-          <Trophy className="h-3 w-3 text-primary" />
-        </div>
+        {team.logo_url ? (
+          <img 
+            src={team.logo_url} 
+            alt={`${team.name} logo`}
+            className="w-6 h-6 rounded object-cover mr-2 flex-shrink-0"
+          />
+        ) : (
+          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center mr-2 flex-shrink-0">
+            <Trophy className="h-3 w-3 text-primary" />
+          </div>
+        )}
         <span className="font-bold text-sm truncate text-foreground">{team.name}</span>
       </div>
 
