@@ -48,7 +48,16 @@ const AdminDashboard = ({ userId }: AdminDashboardProps) => {
     }
 
     setTournaments(data || []);
-    if (data && data.length > 0 && !selectedTournament) {
+    
+    // If no tournaments exist, clear selection
+    if (!data || data.length === 0) {
+      setSelectedTournament("");
+      return;
+    }
+    
+    // If no tournament is selected OR the selected tournament was deleted, select the first one
+    const selectedExists = data.some(t => t.id === selectedTournament);
+    if (!selectedTournament || !selectedExists) {
       setSelectedTournament(data[0].id);
     }
   };
