@@ -229,20 +229,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_user_team: {
-        Args: { _user_id: string }
-        Returns: string
-      }
-      get_user_tournament_id: {
-        Args: { _user_id: string }
-        Returns: string
-      }
+      get_user_team: { Args: { _user_id: string }; Returns: string }
+      get_user_tournament_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      validate_access_code: {
+        Args: { input_code: string }
+        Returns: {
+          role: Database["public"]["Enums"]["app_role"]
+          team_id: string
+          tournament_id: string
+        }[]
       }
     }
     Enums: {

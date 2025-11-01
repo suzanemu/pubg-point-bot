@@ -253,23 +253,6 @@ export default function TeamManager() {
           )}
         </div>
       </Card>
-
-      <Card className="p-6 bg-primary/5 border-primary/20">
-        <h3 className="font-semibold mb-2">Admin Access Code</h3>
-        <div className="flex items-center gap-2">
-          <code className="text-sm bg-muted px-3 py-2 rounded">ADMIN2024</code>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => copyAccessCode("ADMIN2024")}
-          >
-            <Copy className="w-3 h-3" />
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Use this code to access admin features
-        </p>
-      </Card>
     </div>
   );
 }

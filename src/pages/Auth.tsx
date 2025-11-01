@@ -45,11 +45,9 @@ const Auth = () => {
         return;
       }
 
-      // Validate access code
+      // Validate access code using secure server-side function
       const { data: codeData, error: codeError } = await supabase
-        .from("access_codes")
-        .select("role, team_id")
-        .eq("code", accessCode.trim().toUpperCase())
+        .rpc("validate_access_code", { input_code: accessCode.trim().toUpperCase() })
         .single();
 
       if (codeError || !codeData) {
